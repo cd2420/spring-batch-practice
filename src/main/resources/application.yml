@@ -20,9 +20,9 @@ spring:
     generate-ddl: false
     hibernate:
       ddl-auto: none
-    batch:
-      jdbc:
-        initialize-schema: ALWAYS
+  batch:
+    jdbc:
+      initialize-schema: ALWAYS
 ---
 spring:
   config:
