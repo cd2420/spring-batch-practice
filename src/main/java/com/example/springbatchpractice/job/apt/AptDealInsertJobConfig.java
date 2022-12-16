@@ -78,7 +78,8 @@ public class AptDealInsertJobConfig {
     @StepScope
     public ItemWriter<AptDealDto> aptDealWriter() {
         return items -> {
-            items.forEach(System.out::println);
+            items.forEach(System.out::println);  // chunk size 만큼 items 에 데이터가 들어와 있음
+            System.out.println("==============writing Complete ==============");
         };
     }
 
