@@ -2,6 +2,7 @@ package com.example.springbatchpractice.job.apt;
 
 import com.example.springbatchpractice.adapter.ApartmentApiResource;
 import com.example.springbatchpractice.core.dto.AptDealDto;
+import com.example.springbatchpractice.core.repository.LawdRepository;
 import com.example.springbatchpractice.job.validator.LawdCdValidator;
 import com.example.springbatchpractice.job.validator.YearMonthParameterValidator;
 import lombok.RequiredArgsConstructor;
@@ -15,9 +16,11 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.CompositeJobParametersValidator;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.xml.StaxEventItemReader;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
+import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,13 +38,17 @@ public class AptDealInsertJobConfig {
     private final StepBuilderFactory stepBuilderFactory;
 
     private final ApartmentApiResource apartmentApiResource;
+    private final LawdRepository lawdRepository;
 
     @Bean
-    public Job aptDealInsertJob(Step aptDealInsertStep) {
+    public Job aptDealInsertJob(
+            Step guLawdCdStep
+//            ,Step aptDealInsertStep
+    ) {
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
-                .validator(aptDealJobParameterValidator())
-                .start(aptDealInsertStep)
+//                .validator(aptDealJobParameterValidator())
+                .start(guLawdCdStep)
                 .build()
                 ;
     }
@@ -63,6 +70,24 @@ public class AptDealInsertJobConfig {
                 .reader(aptDealResourceReader)
                 .writer(aptDealWriter)
                 .build();
+    }
+
+    @Bean
+    @JobScope
+    public Step guLawdCdStep(Tasklet guLawdCdTasklet) {
+        return stepBuilderFactory.get("guLawdCdStep")
+                .tasklet(guLawdCdTasklet)
+                .build();
+    }
+
+    @Bean
+    @StepScope
+    public Tasklet guLawdCdTasklet() {
+        return (stepContribution, chunkContext) -> {
+            lawdRepository.selectDistinctGuLawdCd()
+                    .forEach(System.out::println);
+            return RepeatStatus.FINISHED;
+        };
     }
 
     @Bean
