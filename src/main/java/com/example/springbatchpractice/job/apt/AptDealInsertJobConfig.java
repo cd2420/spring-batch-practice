@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobParametersValidator;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
@@ -17,6 +18,7 @@ import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.CompositeJobParametersValidator;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.tasklet.Tasklet;
+import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.xml.StaxEventItemReader;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
@@ -28,6 +30,7 @@ import org.springframework.oxm.jaxb.Jaxb2Marshaller;
 
 import java.time.YearMonth;
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @RequiredArgsConstructor
@@ -43,12 +46,14 @@ public class AptDealInsertJobConfig {
     @Bean
     public Job aptDealInsertJob(
             Step guLawdCdStep
+            , Step contextPrintStep
 //            ,Step aptDealInsertStep
     ) {
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
 //                .validator(aptDealJobParameterValidator())
                 .start(guLawdCdStep)
+                .next(contextPrintStep)
                 .build()
                 ;
     }
@@ -84,8 +89,32 @@ public class AptDealInsertJobConfig {
     @StepScope
     public Tasklet guLawdCdTasklet() {
         return (stepContribution, chunkContext) -> {
-            lawdRepository.selectDistinctGuLawdCd()
-                    .forEach(System.out::println);
+
+            StepExecution stepExecution = chunkContext.getStepContext().getStepExecution();
+            ExecutionContext executionContext = stepExecution.getJobExecution().getExecutionContext();
+
+            List<String> guLawdCds = lawdRepository.selectDistinctGuLawdCd();
+            executionContext.putString("guLawdCd", guLawdCds.get(0));
+
+            return RepeatStatus.FINISHED;
+        };
+    }
+
+    @JobScope
+    @Bean
+    public Step contextPrintStep(Tasklet contextPrintTasklet) {
+        return stepBuilderFactory.get("contextPrintStep")
+                .tasklet(contextPrintTasklet)
+                .build();
+    }
+
+    @StepScope
+    @Bean
+    public Tasklet contextPrintTasklet(
+            @Value("#{jobExecutionContext['guLawdCd']}") String guLawdCd
+    ) {
+        return (stepContribution, chunkContext) -> {
+            System.out.println("[contextPrintTasklet] guLawdCd " + guLawdCd);
             return RepeatStatus.FINISHED;
         };
     }
