@@ -47,20 +47,21 @@ public class AptDealInsertJobConfig {
     public Job aptDealInsertJob(
             Step guLawdCdStep
             , Step contextPrintStep
-//            ,Step aptDealInsertStep
+            , Step aptDealInsertStep
     ) {
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
-//                .validator(aptDealJobParameterValidator())
+                .validator(aptDealJobParameterValidator())
                 .start(guLawdCdStep)
                 .next(contextPrintStep)
+                .next(aptDealInsertStep)
                 .build()
                 ;
     }
 
     private JobParametersValidator aptDealJobParameterValidator() {
         CompositeJobParametersValidator validator = new CompositeJobParametersValidator();
-        validator.setValidators(Arrays.asList(new YearMonthParameterValidator(), new LawdCdValidator()));
+        validator.setValidators(Arrays.asList(new YearMonthParameterValidator()));
         return validator;
     }
 
@@ -123,12 +124,13 @@ public class AptDealInsertJobConfig {
     @StepScope
     public StaxEventItemReader<AptDealDto> aptDealResourceReader(
             @Value("#{jobParameters['yearMonth']}") String yearMonth,
-            @Value("#{jobParameters['lawdCd']}") String lawdCd,
+//            @Value("#{jobParameters['lawdCd']}") String lawdCd,
+            @Value("#{jobExecutionContext['guLawdCd']}") String guLawdCd,
              Jaxb2Marshaller aptDealDtoMarshaller
             ) {
         return new StaxEventItemReaderBuilder<AptDealDto>()
                 .name("aptDealResourceReader")
-                .resource(apartmentApiResource.getResource(lawdCd, YearMonth.parse(yearMonth)))
+                .resource(apartmentApiResource.getResource(guLawdCd, YearMonth.parse(yearMonth)))
                 .addFragmentRootElements("item")            // 각 데이터들의 root를 적음
                 .unmarshaller(aptDealDtoMarshaller)
                 .build()
