@@ -7,10 +7,7 @@ import com.example.springbatchpractice.job.validator.LawdCdValidator;
 import com.example.springbatchpractice.job.validator.YearMonthParameterValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.batch.core.Job;
-import org.springframework.batch.core.JobParametersValidator;
-import org.springframework.batch.core.Step;
-import org.springframework.batch.core.StepExecution;
+import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
@@ -47,14 +44,16 @@ public class AptDealInsertJobConfig {
     public Job aptDealInsertJob(
             Step guLawdCdStep
             , Step contextPrintStep
-            , Step aptDealInsertStep
+//            , Step aptDealInsertStep
     ) {
         return jobBuilderFactory.get("aptDealInsertJob")
                 .incrementer(new RunIdIncrementer())
                 .validator(aptDealJobParameterValidator())
                 .start(guLawdCdStep)
-                .next(contextPrintStep)
-                .next(aptDealInsertStep)
+                .on("CONTINUABLE").to(contextPrintStep).next(guLawdCdStep)// exitCode에 CONTINUABLE 이라는 패턴이 있으면  contextPrintStep를 실행해주고 다시 guLawdCdStep 실행한다. 만약 또 CONTINUABLE이 있으면 contextPrintStep를 실행 이 반복됨.
+                .from(guLawdCdStep)
+                .on("*").end() // exitCode가 CONTINUABLE이 아니라면 종료해라
+                .end()
                 .build()
                 ;
     }
@@ -86,6 +85,13 @@ public class AptDealInsertJobConfig {
                 .build();
     }
 
+    /**
+     * ExcutionContext에 저장할 데이터
+     * 1. guLawdCdList - 구 코드 리스트
+     * 2. guLawdCd - 구 코드 -> 다음 스탭에서 활용할 값
+     * 3. itemCount - 남아있는 구 코드와 갯수
+     * @return
+     */
     @Bean
     @StepScope
     public Tasklet guLawdCdTasklet() {
@@ -94,8 +100,28 @@ public class AptDealInsertJobConfig {
             StepExecution stepExecution = chunkContext.getStepContext().getStepExecution();
             ExecutionContext executionContext = stepExecution.getJobExecution().getExecutionContext();
 
-            List<String> guLawdCds = lawdRepository.selectDistinctGuLawdCd();
-            executionContext.putString("guLawdCd", guLawdCds.get(0));
+            // 데이터가 있으면 다음 스탭을 실행하도록 하고, 데이터가 없으면 종료되도록 한다.
+            // 데이터가 있으면 -> CONTINUABLE
+            List<String> guLawdCdList;
+            if (!executionContext.containsKey("guLawdCdList")) {
+                guLawdCdList = lawdRepository.selectDistinctGuLawdCd();
+                executionContext.put("guLawdCdList", guLawdCdList);
+                executionContext.putInt("itemCount", guLawdCdList.size());
+            } else {
+                guLawdCdList = (List<String>) executionContext.get("guLawdCdList");
+            }
+
+            Integer itemCount = executionContext.getInt("itemCount");
+
+            if (itemCount == 0) {
+                stepContribution.setExitStatus(ExitStatus.COMPLETED);
+                return RepeatStatus.FINISHED;
+            }
+
+            itemCount--;
+            executionContext.putString("guLawdCd", guLawdCdList.get(itemCount));
+            executionContext.putInt("itemCount", itemCount);
+            stepContribution.setExitStatus(new ExitStatus("CONTINUABLE"));
 
             return RepeatStatus.FINISHED;
         };
